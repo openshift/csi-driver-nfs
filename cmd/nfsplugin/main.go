@@ -20,6 +20,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/spf13/cobra"
 
@@ -29,6 +30,7 @@ import (
 var (
 	endpoint string
 	nodeID   string
+	perm     string
 )
 
 func init() {
@@ -55,6 +57,8 @@ func main() {
 	cmd.PersistentFlags().StringVar(&endpoint, "endpoint", "", "CSI endpoint")
 	cmd.MarkPersistentFlagRequired("endpoint")
 
+	cmd.PersistentFlags().StringVar(&perm, "mount-permissions", "", "mounted folder permissions")
+
 	cmd.ParseFlags(os.Args[1:])
 	if err := cmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "%s", err.Error())
@@ -65,6 +69,17 @@ func main() {
 }
 
 func handle() {
-	d := nfs.NewNFSdriver(nodeID, endpoint)
+	// Converting string permission representation to uint32
+	var parsedPerm uint64
+	if perm != "" {
+		var err error
+		parsedPerm, err = strconv.ParseUint(perm, 8, 32)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s", err.Error())
+			os.Exit(1)
+		}
+	}
+
+	d := nfs.NewNFSdriver(nodeID, endpoint, uint32(parsedPerm))
 	d.Run()
 }

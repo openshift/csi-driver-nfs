@@ -29,6 +29,8 @@ type nfsDriver struct {
 
 	endpoint string
 
+	perm uint32
+
 	//ids *identityServer
 	ns    *nodeServer
 	cap   []*csi.VolumeCapability_AccessMode
@@ -43,7 +45,7 @@ var (
 	version = "1.0.0-rc2"
 )
 
-func NewNFSdriver(nodeID, endpoint string) *nfsDriver {
+func NewNFSdriver(nodeID, endpoint string, perm uint32) *nfsDriver {
 	glog.Infof("Driver: %v version: %v", driverName, version)
 
 	n := &nfsDriver{
@@ -51,6 +53,7 @@ func NewNFSdriver(nodeID, endpoint string) *nfsDriver {
 		version:  version,
 		nodeID:   nodeID,
 		endpoint: endpoint,
+		perm:     perm,
 	}
 
 	n.AddVolumeCapabilityAccessModes([]csi.VolumeCapability_AccessMode_Mode{csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER})
