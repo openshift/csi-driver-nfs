@@ -417,8 +417,7 @@ func TestNodeUnpublishVolume(t *testing.T) {
 
 	errorTarget := testutil.GetWorkDirPath("error_is_likely_target", t)
 	targetTest := testutil.GetWorkDirPath("target_test", t)
-	targetFile := testutil.GetWorkDirPath("abc.go", t)
-	lockKey := fmt.Sprintf("%s-%s", "vol_1", targetTest)
+	//targetFile := testutil.GetWorkDirPath("abc.go", t)
 
 	tests := []struct {
 		desc        string
@@ -437,10 +436,13 @@ func TestNodeUnpublishVolume(t *testing.T) {
 			req:         &csi.NodeUnpublishVolumeRequest{VolumeId: "vol_1"},
 			expectedErr: status.Error(codes.InvalidArgument, "Target path missing in request"),
 		},
+		/* Not relevant due to carry patch https://github.com/openshift/csi-driver-nfs/commit/59fe400d433137c48de81650026922a88e167177
+		// Downstream doesn't call IsLikelyNotMountPoint, and doesn't raise any error if the target is not mounted
 		{
 			desc: "[Success] Volume not mounted",
 			req:  &csi.NodeUnpublishVolumeRequest{TargetPath: targetFile, VolumeId: "vol_1"},
 		},
+		// Downstream doesn't raise any error if the target is not mounted
 		{
 			desc: "[Error] Volume operation in progress",
 			setup: func() {
@@ -452,6 +454,7 @@ func TestNodeUnpublishVolume(t *testing.T) {
 				ns.Driver.volumeLocks.Release(lockKey)
 			},
 		},
+		*/
 	}
 
 	// Setup
