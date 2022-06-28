@@ -21,9 +21,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
+	"strconv"
 	"strings"
-	"time"
 
 	"github.com/golang/glog"
 
@@ -49,12 +48,16 @@ type NodeServer struct {
 	csi.UnimplementedNodeServer
 }
 
-const (
-	// Deadline for unmount. After this time, umount -f is performed.
-	unmountTimeout = time.Minute
-)
-
-func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
+// NodePublishVolume mount the volume
+func (ns *NodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
+	volCap := req.GetVolumeCapability()
+	if volCap == nil {
+		return nil, status.Error(codes.InvalidArgument, "Volume capability missing in request")
+	}
+	volumeID := req.GetVolumeId()
+	if len(volumeID) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "Volume ID missing in request")
+	}
 	targetPath := req.GetTargetPath()
 	if len(targetPath) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Target path not provided")
@@ -193,24 +196,12 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	return &csi.NodePublishVolumeResponse{}, nil
 }
 
-func (ns *nodeServer) IsNotMountPoint(path string) (bool, error) {
-	mtab, err := ns.mounter.List()
-	if err != nil {
-		return false, err
+// NodeUnpublishVolume unmount the volume
+func (ns *NodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {
+	volumeID := req.GetVolumeId()
+	if len(volumeID) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "Volume ID missing in request")
 	}
-
-	for _, mnt := range mtab {
-		// This is how a directory deleted on the NFS server looks like
-		deletedDir := fmt.Sprintf("%s\\040(deleted)", mnt.Path)
-
-		if mnt.Path == path || mnt.Path == deletedDir {
-			return false, nil
-		}
-	}
-	return true, nil
-}
-
-func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {
 	targetPath := req.GetTargetPath()
 	glog.V(6).Infof("NodeUnpublishVolume started for %s", targetPath)
 
@@ -218,7 +209,6 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	defer ns.Driver.volumeLocks.Release(lockKey)
 
 	klog.V(2).Infof("NodeUnpublishVolume: unmounting volume %s on %s", volumeID, targetPath)
 	var err error
@@ -261,38 +251,8 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
 
-// tryUnmount calls plain "umount" and waits for unmountTimeout for it to finish.
-func (ns *nodeServer) tryUnmount(path string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), unmountTimeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "umount", path)
-	out, cmderr := cmd.CombinedOutput()
-
-	// CombinedOutput() does not return DeadlineExceeded, make sure it's
-	// propagated on timeout.
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-
-	if cmderr != nil {
-		return fmt.Errorf("failed to unmount volume: %s: %s", cmderr, string(out))
-	}
-	return nil
-}
-
-func (ns *nodeServer) forceUnmount(path string) error {
-	cmd := exec.Command("umount", "-f", path)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to force-unmount volume: %s: %s", err, string(out))
-	}
-	return nil
-}
-
-func (ns *nodeServer) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
-	glog.V(5).Infof("Using default NodeGetInfo")
-
+// NodeGetInfo return info of the node on which this plugin is running
+func (ns *NodeServer) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
 	return &csi.NodeGetInfoResponse{
 		NodeId: ns.Driver.nodeID,
 	}, nil
