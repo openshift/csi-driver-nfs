@@ -14,6 +14,7 @@ require (
 	github.com/spf13/cobra v0.0.3
 	golang.org/x/net v0.0.0-20190415100556-4a65cf94b679
 	google.golang.org/grpc v1.20.0
+	gopkg.in/yaml.v2 v2.2.4 // indirect
 	k8s.io/api v0.0.0-20190415132514-c2f1300cac21
 	k8s.io/apiextensions-apiserver v0.0.0-20190315093550-53c4693659ed // indirect
 	k8s.io/apimachinery v0.0.0-20190415132420-07d458fe0356
