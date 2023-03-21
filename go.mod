@@ -50,3 +50,7 @@ replace (
 	k8s.io/sample-cli-plugin => k8s.io/sample-cli-plugin v0.21.0
 	k8s.io/sample-controller => k8s.io/sample-controller v0.21.0
 )
+
+// Use at least v1.5.1. This replace can be removed once no dependency lists an
+// older version.
+replace go.mongodb.org/mongo-driver => go.mongodb.org/mongo-driver v1.5.1
