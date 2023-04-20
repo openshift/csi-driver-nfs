@@ -1,4 +1,4 @@
-FROM registry.ci.openshift.org/ocp/builder:rhel-8-golang-1.20-openshift-4.14
+FROM registry.ci.openshift.org/ocp/builder:rhel-8-golang-1.19-openshift-4.14
 COPY . /go/src/github.com/openshift/csi-driver-nfs
 RUN cd /go/src/github.com/openshift/csi-driver-nfs && \
     go build -o /go/src/github.com/openshift/csi-driver-nfs/nfsplugin cmd/nfsplugin/main.go
