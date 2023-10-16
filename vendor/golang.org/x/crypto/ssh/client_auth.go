@@ -79,9 +79,16 @@ func (c *connection) clientAuthenticate(config *ClientConfig) error {
 	for auth := AuthMethod(new(noneAuth)); auth != nil; {
 		ok, methods, err := auth.auth(sessionID, config.User, c.transport, config.Rand, extensions)
 		if err != nil {
-			// On disconnect, return error immediately
-			if _, isDisconnect := err.(*disconnectMsg); isDisconnect {
-				return err
+			// We return the error later if there is no other method left to
+			// try.
+			ok = authFailure
+		}
+		if ok == authSuccess {
+			// success
+			return nil
+		} else if ok == authFailure {
+			if m := auth.method(); !contains(tried, m) {
+				tried = append(tried, m)
 			}
 			// We return the error later if there is no other method
 			// left to try.
@@ -144,6 +151,15 @@ func (c *connection) clientAuthenticate(config *ClientConfig) error {
 				}
 			}
 		}
+
+		if auth == nil && err != nil {
+			// We have an error and there are no other authentication methods to
+			// try, so we return it.
+			return err
+		}
+	}
+	return fmt.Errorf("ssh: unable to authenticate, attempted methods %v, no supported methods remain", tried)
+}
 
 		if auth == nil && err != nil {
 			// We have an error and there are no other authentication methods to
@@ -283,7 +299,7 @@ func pickSignatureAlgorithm(signer Signer, extensions map[string][]byte) (MultiA
 		// Fallback to use if there is no "server-sig-algs" extension or a
 		// common algorithm cannot be found. We use the public key format if the
 		// MultiAlgorithmSigner supports it, otherwise we return an error.
-		if !slices.Contains(as.Algorithms(), underlyingAlgo(keyFormat)) {
+		if !contains(as.Algorithms(), underlyingAlgo(keyFormat)) {
 			return "", fmt.Errorf("ssh: no common public key signature algorithm, server only supports %q for key type %q, signer only supports %v",
 				underlyingAlgo(keyFormat), keyFormat, as.Algorithms())
 		}
@@ -310,18 +326,14 @@ func pickSignatureAlgorithm(signer Signer, extensions map[string][]byte) (MultiA
 	}
 
 	// Filter algorithms based on those supported by MultiAlgorithmSigner.
-	// Iterate over the signer's algorithms first to preserve its preference order.
-	supportedKeyAlgos := algorithmsForKeyFormat(keyFormat)
 	var keyAlgos []string
-	for _, signerAlgo := range as.Algorithms() {
-		if idx := slices.IndexFunc(supportedKeyAlgos, func(algo string) bool {
-			return underlyingAlgo(algo) == signerAlgo
-		}); idx >= 0 {
-			keyAlgos = append(keyAlgos, supportedKeyAlgos[idx])
+	for _, algo := range algorithmsForKeyFormat(keyFormat) {
+		if contains(as.Algorithms(), underlyingAlgo(algo)) {
+			keyAlgos = append(keyAlgos, algo)
 		}
 	}
 
-	algo, err := findCommon("public key signature algorithm", keyAlgos, serverAlgos, true)
+	algo, err := findCommon("public key signature algorithm", keyAlgos, serverAlgos)
 	if err != nil {
 		// If there is no overlap, return the fallback algorithm to support
 		// servers that fail to list all supported algorithms.
@@ -343,10 +355,7 @@ func (cb publicKeyCallback) auth(session []byte, user string, c packetConn, rand
 	}
 	var methods []string
 	var errSigAlgo error
-
-	origSignersLen := len(signers)
-	for idx := 0; idx < len(signers); idx++ {
-		signer := signers[idx]
+	for _, signer := range signers {
 		pub := signer.PublicKey()
 		as, algo, err := pickSignatureAlgorithm(signer, extensions)
 		if err != nil && errSigAlgo == nil {
@@ -413,11 +422,11 @@ func (cb publicKeyCallback) auth(session []byte, user string, c packetConn, rand
 			return authFailure, nil, err
 		}
 
-		// If authentication succeeds or partially succeeds, return immediately
-		// so the caller can select the next auth method. According to RFC 4252
-		// Section 7, if the server no longer lists "publickey" among its
-		// allowed methods, do not attempt to authenticate with any other keys.
-		if success == authSuccess || success == authPartialSuccess || !slices.Contains(methods, cb.method()) {
+		// If authentication succeeds or the list of available methods does not
+		// contain the "publickey" method, do not attempt to authenticate with any
+		// other keys.  According to RFC 4252 Section 7, the latter can occur when
+		// additional authentication methods are required.
+		if success == authSuccess || !contains(methods, cb.method()) {
 			return success, methods, err
 		}
 	}

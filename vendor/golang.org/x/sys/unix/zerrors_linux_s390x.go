@@ -428,7 +428,6 @@ const (
 	SO_OOBINLINE                     = 0xa
 	SO_PASSCRED                      = 0x10
 	SO_PASSPIDFD                     = 0x4c
-	SO_PASSRIGHTS                    = 0x53
 	SO_PASSSEC                       = 0x22
 	SO_PEEK_OFF                      = 0x2a
 	SO_PEERCRED                      = 0x11
