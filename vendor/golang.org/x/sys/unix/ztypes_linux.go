@@ -4880,7 +4880,7 @@ const (
 	NL80211_ATTR_MAC_HINT                                   = 0xc8
 	NL80211_ATTR_MAC_MASK                                   = 0xd7
 	NL80211_ATTR_MAX_AP_ASSOC_STA                           = 0xca
-	NL80211_ATTR_MAX                                        = 0x15c
+	NL80211_ATTR_MAX                                        = 0x146
 	NL80211_ATTR_MAX_CRIT_PROT_DURATION                     = 0xb4
 	NL80211_ATTR_MAX_CSA_COUNTERS                           = 0xce
 	NL80211_ATTR_MAX_HW_TIMESTAMP_PEERS                     = 0x143
@@ -5267,8 +5267,7 @@ const (
 	NL80211_CMD_LEAVE_IBSS                                  = 0x2c
 	NL80211_CMD_LEAVE_MESH                                  = 0x45
 	NL80211_CMD_LEAVE_OCB                                   = 0x6d
-	NL80211_CMD_LINKS_REMOVED                               = 0x9a
-	NL80211_CMD_MAX                                         = 0x9f
+	NL80211_CMD_MAX                                         = 0x9a
 	NL80211_CMD_MICHAEL_MIC_FAILURE                         = 0x29
 	NL80211_CMD_MODIFY_LINK_STA                             = 0x97
 	NL80211_CMD_NAN_MATCH                                   = 0x78
@@ -5926,7 +5925,7 @@ const (
 	NL80211_RATE_INFO_HE_RU_ALLOC_52                        = 0x1
 	NL80211_RATE_INFO_HE_RU_ALLOC_996                       = 0x5
 	NL80211_RATE_INFO_HE_RU_ALLOC                           = 0x11
-	NL80211_RATE_INFO_MAX                                   = 0x20
+	NL80211_RATE_INFO_MAX                                   = 0x1d
 	NL80211_RATE_INFO_MCS                                   = 0x2
 	NL80211_RATE_INFO_S1G_MCS                               = 0x17
 	NL80211_RATE_INFO_S1G_NSS                               = 0x18

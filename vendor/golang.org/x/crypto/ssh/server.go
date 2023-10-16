@@ -855,7 +855,7 @@ userAuthLoop:
 				// ssh-rsa-cert-v01@openssh.com algorithm with ssh-rsa public
 				// key type. The algorithm and public key type must be
 				// consistent: both must be certificate algorithms, or neither.
-				if !slices.Contains(algorithmsForKeyFormat(pubKey.Type()), algo) {
+				if !contains(algorithmsForKeyFormat(pubKey.Type()), algo) {
 					authErr = fmt.Errorf("ssh: public key type %q not compatible with selected algorithm %q",
 						pubKey.Type(), algo)
 					break
