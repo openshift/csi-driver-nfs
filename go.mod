@@ -1,6 +1,6 @@
 module github.com/kubernetes-csi/csi-driver-nfs
 
-go 1.22.7
+go 1.23.0
 
 toolchain go1.23.2
 
