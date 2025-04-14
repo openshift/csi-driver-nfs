@@ -28,6 +28,14 @@ volumeAttributes.server | NFS Server address | domain name `nfs-server.default.s
 volumeAttributes.share | NFS share path | `/` |  Yes  |
 volumeAttributes.mountPermissions | mounted folder permissions. The default is `0`, if set as non-zero, driver will perform `chmod` after mount |  | No |
 
+### `VolumeSnapshotClass`
+
+Name | Meaning | Available Value | Mandatory | Default value
+--- | --- | --- | --- | ---
+server | NFS Server address | domain name `nfs-server.default.svc.cluster.local` <br>or IP address `127.0.0.1` |  No | use server from source volume by default
+share | NFS share path | `/` | No | use share from source volume by default
+mountOptions | mount options separated by comma during snapshot creation, e.g. `"nfsvers=4.1,sec=sys"` |  | No | ""
+
 ### Tips
 #### `subDir` parameter supports following pv/pvc metadata conversion
 > if `subDir` value contains following strings, it would be converted into corresponding pv/pvc name or namespace
@@ -56,6 +64,7 @@ parameters:
   csi.storage.k8s.io/provisioner-secret-namespace: "default"
 reclaimPolicy: Delete
 volumeBindingMode: Immediate
+allowVolumeExpansion: true
 mountOptions:
   - nfsvers=4.1
 ```
