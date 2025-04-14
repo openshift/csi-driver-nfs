@@ -38,6 +38,7 @@ type DriverOptions struct {
 	DefaultOnDeletePolicy        string
 	VolStatsCacheExpireInMinutes int
 	RemoveArchivedVolumePath     bool
+	UseTarCommandInSnapshot      bool
 }
 
 type Driver struct {
@@ -49,6 +50,7 @@ type Driver struct {
 	workingMountDir          string
 	defaultOnDeletePolicy    string
 	removeArchivedVolumePath bool
+	useTarCommandInSnapshot  bool
 
 	//ids *identityServer
 	ns          *NodeServer
@@ -96,6 +98,8 @@ func NewDriver(options *DriverOptions) *Driver {
 		workingMountDir:              options.WorkingMountDir,
 		volStatsCacheExpireInMinutes: options.VolStatsCacheExpireInMinutes,
 		removeArchivedVolumePath:     options.RemoveArchivedVolumePath,
+		useTarCommandInSnapshot:      options.UseTarCommandInSnapshot,
+		defaultOnDeletePolicy:        options.DefaultOnDeletePolicy,
 	}
 
 	n.AddControllerServiceCapabilities([]csi.ControllerServiceCapability_RPC_Type{
@@ -103,6 +107,7 @@ func NewDriver(options *DriverOptions) *Driver {
 		csi.ControllerServiceCapability_RPC_SINGLE_NODE_MULTI_WRITER,
 		csi.ControllerServiceCapability_RPC_CLONE_VOLUME,
 		csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT,
+		csi.ControllerServiceCapability_RPC_EXPAND_VOLUME,
 	})
 
 	n.AddNodeServiceCapabilities([]csi.NodeServiceCapability_RPC_Type{
