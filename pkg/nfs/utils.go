@@ -272,7 +272,7 @@ type TimeoutFunc func() (err error)
 // WaitUntilTimeout waits for the exec function to complete or return timeout error
 func WaitUntilTimeout(timeout time.Duration, execFunc ExecFunc, timeoutFunc TimeoutFunc) error {
 	// Create a channel to receive the result of the exec function
-	done := make(chan bool)
+	done := make(chan bool, 1)
 	var err error
 
 	// Start the exec function in a goroutine
@@ -288,4 +288,22 @@ func WaitUntilTimeout(timeout time.Duration, execFunc ExecFunc, timeoutFunc Time
 	case <-time.After(timeout):
 		return timeoutFunc()
 	}
+}
+
+// getVolumeCapabilityFromSecret retrieves the volume capability from the secret
+// if secret contains mountOptions, it will return the volume capability
+// if secret does not contain mountOptions, it will return nil
+func getVolumeCapabilityFromSecret(volumeID string, secret map[string]string) *csi.VolumeCapability {
+	mountOptions := getMountOptions(secret)
+	if mountOptions != "" {
+		klog.V(2).Infof("found mountOptions(%s) for volume(%s)", mountOptions, volumeID)
+		return &csi.VolumeCapability{
+			AccessType: &csi.VolumeCapability_Mount{
+				Mount: &csi.VolumeCapability_MountVolume{
+					MountFlags: []string{mountOptions},
+				},
+			},
+		}
+	}
+	return nil
 }
