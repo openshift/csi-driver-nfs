@@ -14,9 +14,12 @@
       though a user has a folder link to it.
 
 ### install a specific version
+> [!IMPORTANT]  
+> Starting from version `4.11.0`, the prefix `v` is removed from hlem chart release so they are in line with [semver](https://semver.org). Therefore, when upgrading, refer to version `4.11.0` instead of `v4.11.0`.
+
 ```console
 helm repo add csi-driver-nfs https://raw.githubusercontent.com/kubernetes-csi/csi-driver-nfs/master/charts
-helm install csi-driver-nfs csi-driver-nfs/csi-driver-nfs --namespace kube-system --version 4.11.0
+helm install csi-driver-nfs csi-driver-nfs/csi-driver-nfs --namespace kube-system --version 4.12.0
 ```
 
 ### install driver with customized driver name, deployment name
@@ -56,10 +59,10 @@ The following table lists the configurable parameters of the latest NFS CSI Driv
 | `image.csiProvisioner.tag`                        | csi-provisioner docker image tag                           | `v5.3.0`                                                            |
 | `image.csiProvisioner.pullPolicy`                 | csi-provisioner image pull policy                          | `IfNotPresent`                                                      |
 | `image.livenessProbe.repository`                  | liveness-probe docker image                                | `registry.k8s.io/sig-storage/livenessprobe`                              |
-| `image.livenessProbe.tag`                         | liveness-probe docker image tag                            | `v2.16.0`                                                            |
+| `image.livenessProbe.tag`                         | liveness-probe docker image tag                            | `v2.17.0`                                                            |
 | `image.livenessProbe.pullPolicy`                  | liveness-probe image pull policy                           | `IfNotPresent`                                                      |
 | `image.nodeDriverRegistrar.repository`            | csi-node-driver-registrar docker image                     | `registry.k8s.io/sig-storage/csi-node-driver-registrar`                  |
-| `image.nodeDriverRegistrar.tag`                   | csi-node-driver-registrar docker image tag                 | `v2.14.0`                                                            |
+| `image.nodeDriverRegistrar.tag`                   | csi-node-driver-registrar docker image tag                 | `v2.15.0`                                                            |
 | `image.nodeDriverRegistrar.pullPolicy`            | csi-node-driver-registrar image pull policy                | `IfNotPresent`                                                      |
 | `imagePullSecrets`                                | Specify docker-registry secret names as an array           | [] (does not add image pull secrets to deployed pods)                                                           |
 | `serviceAccount.create`                           | whether create service account of csi-nfs-controller       | `true`                                                              |
@@ -113,6 +116,37 @@ The following table lists the configurable parameters of the latest NFS CSI Driv
 | `externalSnapshotter.resources.requests.cpu`          | snapshot-controller cpu requests limits                    | 10m                                                            |
 | `externalSnapshotter.resources.requests.memory`       | snapshot-controller memory requests limits                 | 20Mi                                                           |
 | `storageClass.create` | create storageclass| `false` |  |
+| `storageClasses` | create multiple storageclasses (if specified, `storageClass.create` is still respected)| `[]` |  |
+
+### Create multiple storage classes
+
+You can create multiple storage classes with different configurations using the `storageClasses` parameter:
+
+```yaml
+storageClasses:
+  - name: nfs-delete
+    annotations:
+      storageclass.kubernetes.io/is-default-class: "true"
+    parameters:
+      server: nfs-server.default.svc.cluster.local
+      share: /
+    reclaimPolicy: Delete
+    volumeBindingMode: Immediate
+    mountOptions:
+      - nfsvers=4.1
+  - name: nfs-retain
+    parameters:
+      server: nfs-server.default.svc.cluster.local
+      share: /data
+    reclaimPolicy: Retain
+    volumeBindingMode: Immediate
+    mountOptions:
+      - nfsvers=4.1
+```
+Install with custom values:
+```console
+helm install csi-driver-nfs csi-driver-nfs/csi-driver-nfs --namespace kube-system -f custom-values.yaml
+```
 
 ## troubleshooting
  - Add `--wait -v=5 --debug` in `helm install` command to get detailed error
