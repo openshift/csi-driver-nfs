@@ -173,7 +173,7 @@ func TestChmodIfPermissionMismatch(t *testing.T) {
 	tests := []struct {
 		desc          string
 		path          string
-		mode          os.FileMode
+		mode          uint32
 		expectedError error
 	}{
 		{
@@ -550,6 +550,48 @@ func TestGetVolumeCapabilityFromSecret(t *testing.T) {
 			result := getVolumeCapabilityFromSecret(test.volumeID, test.secret)
 			if !reflect.DeepEqual(result, test.expected) {
 				t.Errorf("test[%s]: unexpected result: %v, expected: %v", test.desc, result, test.expected)
+			}
+		})
+	}
+}
+
+func TestValidatePath(t *testing.T) {
+	tests := []struct {
+		desc        string
+		path        string
+		expectError bool
+	}{
+		{"valid path", "/home/user/data", false},
+		{"valid relative path", "user/data/file.txt", false},
+		{"empty path", "", false},
+		{"root path", "/", false},
+		{"single dot", "/home/./user", false},
+
+		{"traversal start", "../etc/passwd", true},
+		{"traversal middle", "/home/../etc/passwd", true},
+		{"traversal end", "/home/user/..", true},
+		{"multiple traversal", "/home/../../etc/passwd", true},
+		{"only traversal", "..", true},
+
+		{"triple dots valid", "/home/.../data", false},
+
+		{"windows traversal", "..\\etc\\passwd", false},
+		{"mixed separators", "foo\\..\\bar", false},
+
+		{"double slash", "foo//bar", false},
+		{"dot traversal", "./../etc", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			err := validatePath(tt.path)
+
+			if tt.expectError && err == nil {
+				t.Fatalf("expected error for path %q", tt.path)
+			}
+
+			if !tt.expectError && err != nil {
+				t.Fatalf("unexpected error for path %q: %v", tt.path, err)
 			}
 		})
 	}

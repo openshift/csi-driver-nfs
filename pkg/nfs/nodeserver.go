@@ -18,10 +18,12 @@ package nfs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -30,11 +32,12 @@ import (
 	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/pkg/volume"
 	mount "k8s.io/mount-utils"
-
-	azcache "sigs.k8s.io/cloud-provider-azure/pkg/cache"
 )
 
 const mountTimeoutInSec = 110
+
+// lstatFunc is used for testing to inject stale file handle errors
+var lstatFunc = os.Lstat
 
 // NodeServer driver
 type NodeServer struct {
@@ -117,6 +120,10 @@ func (ns *NodeServer) NodePublishVolume(_ context.Context, req *csi.NodePublishV
 		source = fmt.Sprintf("%s/%s", source, subDir)
 	}
 
+	if err := validatePath(source); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid volume source %q: %v", source, err)
+	}
+
 	notMnt, err := ns.mounter.IsLikelyNotMountPoint(targetPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -129,7 +136,18 @@ func (ns *NodeServer) NodePublishVolume(_ context.Context, req *csi.NodePublishV
 		}
 	}
 	if !notMnt {
-		return &csi.NodePublishVolumeResponse{}, nil
+		// check if the existing mount is stale (e.g. after NFS server restart)
+		if _, err := lstatFunc(targetPath); err != nil && os.IsPermission(err) {
+			return &csi.NodePublishVolumeResponse{}, nil
+		} else if err != nil && isStaleFileHandle(err) {
+			klog.Warningf("NodePublishVolume: detected stale mount at %s, attempting remount", targetPath)
+			if unmountErr := ns.mounter.Unmount(targetPath); unmountErr != nil {
+				return nil, status.Errorf(codes.Internal, "failed to unmount stale mount %s: %v", targetPath, unmountErr)
+			}
+			// fall through to remount
+		} else {
+			return &csi.NodePublishVolumeResponse{}, nil
+		}
 	}
 
 	klog.V(2).Infof("NodePublishVolume: volumeID(%v) source(%s) targetPath(%s) mountflags(%v)", volumeID, source, targetPath, mountOptions)
@@ -150,7 +168,7 @@ func (ns *NodeServer) NodePublishVolume(_ context.Context, req *csi.NodePublishV
 	}
 
 	if mountPermissions > 0 {
-		if err := chmodIfPermissionMismatch(targetPath, os.FileMode(mountPermissions)); err != nil {
+		if err := chmodIfPermissionMismatch(targetPath, uint32(mountPermissions)); err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 	} else {
@@ -219,7 +237,7 @@ func (ns *NodeServer) NodeGetVolumeStats(_ context.Context, req *csi.NodeGetVolu
 	}
 
 	// check if the volume stats is cached
-	cache, err := ns.Driver.volStatsCache.Get(req.VolumeId, azcache.CacheReadTypeDefault)
+	cache, err := ns.Driver.volStatsCache.Get(req.VolumeId, CacheReadTypeDefault)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "%v", err)
 	}
@@ -312,4 +330,16 @@ func makeDir(pathname string) error {
 		}
 	}
 	return nil
+}
+
+// isStaleFileHandle checks if an error is caused by a stale NFS file handle (ESTALE)
+func isStaleFileHandle(err error) bool {
+	if err == nil {
+		return false
+	}
+	var errno syscall.Errno
+	if errors.As(err, &errno) {
+		return errno == syscall.ESTALE
+	}
+	return strings.Contains(err.Error(), "stale NFS file handle") || strings.Contains(err.Error(), "stale file handle")
 }
