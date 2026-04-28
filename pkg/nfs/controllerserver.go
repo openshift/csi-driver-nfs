@@ -32,7 +32,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	azcache "sigs.k8s.io/cloud-provider-azure/pkg/cache"
 
 	"k8s.io/klog/v2"
 )
@@ -81,8 +80,11 @@ type nfsSnapshot struct {
 	src string
 }
 
-func (snap nfsSnapshot) archiveName() string {
-	return fmt.Sprintf("%v.tar.gz", snap.src)
+func (snap nfsSnapshot) archiveName(enableCompression bool) string {
+	if enableCompression {
+		return fmt.Sprintf("%v.tar.gz", snap.src)
+	}
+	return fmt.Sprintf("%v.tar", snap.src)
 }
 
 // Ordering of elements in the CSI volume id.
@@ -185,7 +187,7 @@ func (cs *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 
 	if mountPermissions > 0 {
 		// Reset directory permissions because of umask problems
-		if err = os.Chmod(internalVolumePath, os.FileMode(mountPermissions)); err != nil {
+		if err := chmodIfPermissionMismatch(internalVolumePath, uint32(mountPermissions)); err != nil {
 			klog.Warningf("failed to chmod subdirectory: %v", err)
 		}
 	}
@@ -231,7 +233,7 @@ func (cs *ControllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 
 	if !strings.EqualFold(nfsVol.onDelete, retain) {
 		// check whether volumeID is in the cache
-		cache, err := cs.Driver.volDeletionCache.Get(volumeID, azcache.CacheReadTypeDefault)
+		cache, err := cs.Driver.volDeletionCache.Get(volumeID, CacheReadTypeDefault)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "%v", err)
 		}
@@ -377,7 +379,7 @@ func (cs *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateS
 	if err = os.MkdirAll(snapInternalVolPath, 0777); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to make subdirectory: %v", err)
 	}
-	if err := validateSnapshot(snapInternalVolPath, snapshot); err != nil {
+	if err := validateSnapshot(snapInternalVolPath, snapshot, cs.Driver.enableSnapshotCompression); err != nil {
 		return nil, err
 	}
 
@@ -391,15 +393,21 @@ func (cs *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateS
 	}()
 
 	srcPath := getInternalVolumePath(cs.Driver.workingMountDir, srcVol)
-	dstPath := filepath.Join(snapInternalVolPath, snapshot.archiveName())
+	dstPath := filepath.Join(snapInternalVolPath, snapshot.archiveName(cs.Driver.enableSnapshotCompression))
 
 	klog.V(2).Infof("tar %v -> %v", srcPath, dstPath)
 	if cs.Driver.useTarCommandInSnapshot {
-		if out, err := exec.Command("tar", "-C", srcPath, "-czvf", dstPath, ".").CombinedOutput(); err != nil {
+		var tarArgs []string
+		if cs.Driver.enableSnapshotCompression {
+			tarArgs = []string{"-C", srcPath, "-czvf", dstPath, "."}
+		} else {
+			tarArgs = []string{"-C", srcPath, "-cvf", dstPath, "."}
+		}
+		if out, err := exec.Command("tar", tarArgs...).CombinedOutput(); err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to create archive for snapshot: %v: %v", err, string(out))
 		}
 	} else {
-		if err := TarPack(srcPath, dstPath, true); err != nil {
+		if err := TarPack(srcPath, dstPath, cs.Driver.enableSnapshotCompression); err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to create archive for snapshot: %v", err)
 		}
 	}
@@ -551,16 +559,30 @@ func (cs *ControllerServer) copyFromSnapshot(ctx context.Context, req *csi.Creat
 	}()
 
 	// untar snapshot archive to dst path
-	snapPath := filepath.Join(getInternalVolumePath(cs.Driver.workingMountDir, snapVol), snap.archiveName())
+	snapInternalVolPath := getInternalVolumePath(cs.Driver.workingMountDir, snapVol)
+	// Try compressed archive first for backward compatibility, then uncompressed
+	enableCompression := true
+	snapPath := filepath.Join(snapInternalVolPath, snap.archiveName(true))
+	if _, err := os.Stat(snapPath); os.IsNotExist(err) {
+		// Try uncompressed archive
+		snapPath = filepath.Join(snapInternalVolPath, snap.archiveName(false))
+		enableCompression = false
+	}
 	dstPath := getInternalVolumePath(cs.Driver.workingMountDir, dstVol)
 	klog.V(2).Infof("copy volume from snapshot %v -> %v", snapPath, dstPath)
 
 	if cs.Driver.useTarCommandInSnapshot {
-		if out, err := exec.Command("tar", "-xzvf", snapPath, "-C", dstPath).CombinedOutput(); err != nil {
+		var tarArgs []string
+		if enableCompression {
+			tarArgs = []string{"-xzvf", snapPath, "-C", dstPath}
+		} else {
+			tarArgs = []string{"-xvf", snapPath, "-C", dstPath}
+		}
+		if out, err := exec.Command("tar", tarArgs...).CombinedOutput(); err != nil {
 			return status.Errorf(codes.Internal, "failed to copy volume for snapshot: %v: %v", err, string(out))
 		}
 	} else {
-		if err := TarUnpack(snapPath, dstPath, true); err != nil {
+		if err := TarUnpack(snapPath, dstPath, enableCompression); err != nil {
 			return status.Errorf(codes.Internal, "failed to copy volume for snapshot: %v", err)
 		}
 	}
@@ -687,6 +709,13 @@ func newNFSVolume(name string, size int64, params map[string]string, defaultOnDe
 		return nil, fmt.Errorf("%v is a required parameter", paramServer)
 	}
 
+	if err := validatePath(baseDir); err != nil {
+		return nil, fmt.Errorf("invalid share %q: %v", baseDir, err)
+	}
+	if err := validatePath(subDir); err != nil {
+		return nil, fmt.Errorf("invalid subDir %q: %v", subDir, err)
+	}
+
 	vol := &nfsVolume{
 		server:  server,
 		baseDir: baseDir,
@@ -796,6 +825,13 @@ func getNfsVolFromID(id string) (*nfsVolume, error) {
 		}
 	}
 
+	if err := validatePath(subDir); err != nil {
+		return nil, fmt.Errorf("invalid subDir %q: %v", subDir, err)
+	}
+	if err := validatePath(baseDir); err != nil {
+		return nil, fmt.Errorf("invalid baseDir %q: %v", baseDir, err)
+	}
+
 	return &nfsVolume{
 		id:       id,
 		server:   server,
@@ -839,7 +875,8 @@ func isValidVolumeCapabilities(volCaps []*csi.VolumeCapability) error {
 }
 
 // Validate snapshot after internal mount
-func validateSnapshot(snapInternalVolPath string, snap *nfsSnapshot) error {
+func validateSnapshot(snapInternalVolPath string, snap *nfsSnapshot, enableCompression bool) error {
+	expectedArchiveName := snap.archiveName(enableCompression)
 	return filepath.WalkDir(snapInternalVolPath, func(path string, d fs.DirEntry, err error) error {
 		if path == snapInternalVolPath {
 			// skip root
@@ -848,10 +885,14 @@ func validateSnapshot(snapInternalVolPath string, snap *nfsSnapshot) error {
 		if err != nil {
 			return err
 		}
-		if d.Name() != snap.archiveName() {
+		// Check if it's either compressed or uncompressed archive
+		compressedName := snap.archiveName(true)
+		uncompressedName := snap.archiveName(false)
+		if d.Name() != compressedName && d.Name() != uncompressedName {
 			// there should be just one archive in the snapshot path and archive name should match
-			return status.Errorf(codes.AlreadyExists, "snapshot with the same name but different source volume ID already exists: found %q, desired %q", d.Name(), snap.archiveName())
+			return status.Errorf(codes.AlreadyExists, "snapshot with the same name but different source volume ID already exists: found %q, desired %q", d.Name(), expectedArchiveName)
 		}
+		// If archive already exists (either compressed or uncompressed), snapshot was already created
 		return nil
 	})
 }

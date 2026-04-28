@@ -35,11 +35,16 @@ var (
 	volStatsCacheExpireInMinutes = flag.Int("vol-stats-cache-expire-in-minutes", 10, "The cache expire time in minutes for volume stats cache")
 	removeArchivedVolumePath     = flag.Bool("remove-archived-volume-path", false, "remove archived volume path in DeleteVolume")
 	useTarCommandInSnapshot      = flag.Bool("use-tar-command-in-snapshot", false, "use tar command to pack and unpack snapshot data")
+	enableSnapshotCompression    = flag.Bool("enable-snapshot-compression", true, "enable compression when creating volume snapshots")
 )
 
 func main() {
 	klog.InitFlags(nil)
 	_ = flag.Set("logtostderr", "true")
+	// Opt into the new klog behavior where -stderrthreshold is honored even
+	// when -logtostderr=true (see kubernetes/klog#212, kubernetes/klog#432).
+	_ = flag.Set("legacy_stderr_threshold_behavior", "false")
+	_ = flag.Set("stderrthreshold", "INFO")
 	flag.Parse()
 	if *nodeID == "" {
 		klog.Warning("nodeid is empty")
@@ -60,6 +65,7 @@ func handle() {
 		VolStatsCacheExpireInMinutes: *volStatsCacheExpireInMinutes,
 		RemoveArchivedVolumePath:     *removeArchivedVolumePath,
 		UseTarCommandInSnapshot:      *useTarCommandInSnapshot,
+		EnableSnapshotCompression:    *enableSnapshotCompression,
 	}
 	d := nfs.NewDriver(&driverOptions)
 	d.Run(false)
