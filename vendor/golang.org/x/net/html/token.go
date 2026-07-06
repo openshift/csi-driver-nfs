@@ -901,7 +901,7 @@ func (z *Tokenizer) readTag(saveAttr bool) {
 		z.readTagAttrKey()
 		z.readTagAttrVal()
 		// Save pendingAttr if saveAttr and that attribute has a non-empty key, and the key hasn't been seen before.
-		key := string(lower(bytes.Clone(z.buf[z.pendingAttr[0].start:z.pendingAttr[0].end])))
+		key := strings.ToLower(string(z.buf[z.pendingAttr[0].start:z.pendingAttr[0].end]))
 		if saveAttr && z.pendingAttr[0].start != z.pendingAttr[0].end && !z.attrNames[key] {
 			z.attr = append(z.attr, z.pendingAttr)
 			z.attrNames[key] = true
