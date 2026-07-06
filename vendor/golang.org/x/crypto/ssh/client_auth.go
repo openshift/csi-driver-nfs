@@ -79,16 +79,9 @@ func (c *connection) clientAuthenticate(config *ClientConfig) error {
 	for auth := AuthMethod(new(noneAuth)); auth != nil; {
 		ok, methods, err := auth.auth(sessionID, config.User, c.transport, config.Rand, extensions)
 		if err != nil {
-			// We return the error later if there is no other method left to
-			// try.
-			ok = authFailure
-		}
-		if ok == authSuccess {
-			// success
-			return nil
-		} else if ok == authFailure {
-			if m := auth.method(); !contains(tried, m) {
-				tried = append(tried, m)
+			// On disconnect, return error immediately
+			if _, isDisconnect := err.(*disconnectMsg); isDisconnect {
+				return err
 			}
 			// We return the error later if there is no other method
 			// left to try.
@@ -422,11 +415,11 @@ func (cb publicKeyCallback) auth(session []byte, user string, c packetConn, rand
 			return authFailure, nil, err
 		}
 
-		// If authentication succeeds or the list of available methods does not
-		// contain the "publickey" method, do not attempt to authenticate with any
-		// other keys.  According to RFC 4252 Section 7, the latter can occur when
-		// additional authentication methods are required.
-		if success == authSuccess || !contains(methods, cb.method()) {
+		// If authentication succeeds or partially succeeds, return immediately
+		// so the caller can select the next auth method. According to RFC 4252
+		// Section 7, if the server no longer lists "publickey" among its
+		// allowed methods, do not attempt to authenticate with any other keys.
+		if success == authSuccess || success == authPartialSuccess || !slices.Contains(methods, cb.method()) {
 			return success, methods, err
 		}
 	}

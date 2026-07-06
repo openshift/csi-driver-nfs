@@ -70,11 +70,9 @@ func (t *headerFieldTable) len() int {
 
 // addEntry adds a new entry.
 func (t *headerFieldTable) addEntry(f HeaderField) {
-	if t.byName != nil {
-		id := uint64(t.len()) + t.evictCount + 1
-		t.byName[f.Name] = id
-		t.byNameValue[pairNameValue{f.Name, f.Value}] = id
-	}
+	id := uint64(t.len()) + t.evictCount + 1
+	t.byName[f.Name] = id
+	t.byNameValue[pairNameValue{f.Name, f.Value}] = id
 	t.ents = append(t.ents, f)
 }
 

@@ -2906,6 +2906,10 @@ const (
 	PR_RISCV_V_VSTATE_CTRL_NEXT_MASK            = 0xc
 	PR_RISCV_V_VSTATE_CTRL_OFF                  = 0x1
 	PR_RISCV_V_VSTATE_CTRL_ON                   = 0x2
+	PR_RSEQ_SLICE_EXTENSION                     = 0x4f
+	PR_RSEQ_SLICE_EXTENSION_GET                 = 0x1
+	PR_RSEQ_SLICE_EXTENSION_SET                 = 0x2
+	PR_RSEQ_SLICE_EXT_ENABLE                    = 0x1
 	PR_SCHED_CORE                               = 0x3e
 	PR_SCHED_CORE_CREATE                        = 0x1
 	PR_SCHED_CORE_GET                           = 0x0
