@@ -500,8 +500,13 @@ func (cs *ControllerServer) internalMount(ctx context.Context, vol *nfsVolume, v
 		paramShare:  sharePath,
 	}
 	for k, v := range volumeContext {
-		// don't set subDir field since only nfs-server:/share should be mounted in CreateVolume/DeleteVolume
-		if strings.ToLower(k) != paramSubDir {
+		// don't set subDir, server, or share fields: only nfs-server:/share
+		// should be mounted via the volume's own values across all internal
+		// mount callers (CreateVolume, DeleteVolume, CreateSnapshot, etc.)
+		switch strings.ToLower(k) {
+		case paramSubDir, paramServer, paramShare:
+			continue
+		default:
 			volContext[k] = v
 		}
 	}
@@ -830,6 +835,9 @@ func getNfsVolFromID(id string) (*nfsVolume, error) {
 	}
 	if err := validatePath(baseDir); err != nil {
 		return nil, fmt.Errorf("invalid baseDir %q: %v", baseDir, err)
+	}
+	if err := validatePath(uuid); err != nil {
+		return nil, fmt.Errorf("invalid uuid %q: %v", uuid, err)
 	}
 
 	return &nfsVolume{

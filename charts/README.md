@@ -56,18 +56,19 @@ The following table lists the configurable parameters of the latest NFS CSI Driv
 | `image.nfs.tag`                                   | csi-driver-nfs image tag                                   | `latest`                                                |
 | `image.nfs.pullPolicy`                            | csi-driver-nfs image pull policy                           | `IfNotPresent`                                                      |
 | `image.csiProvisioner.repository`                 | csi-provisioner docker image                               | `registry.k8s.io/sig-storage/csi-provisioner`                            |
-| `image.csiProvisioner.tag`                        | csi-provisioner docker image tag                           | `v6.2.0`                                                            |
+| `image.csiProvisioner.tag`                        | csi-provisioner docker image tag                           | `v6.3.0`                                                            |
 | `image.csiProvisioner.pullPolicy`                 | csi-provisioner image pull policy                          | `IfNotPresent`                                                      |
 | `image.livenessProbe.repository`                  | liveness-probe docker image                                | `registry.k8s.io/sig-storage/livenessprobe`                              |
-| `image.livenessProbe.tag`                         | liveness-probe docker image tag                            | `v2.18.0`                                                            |
+| `image.livenessProbe.tag`                         | liveness-probe docker image tag                            | `v2.19.0`                                                            |
 | `image.livenessProbe.pullPolicy`                  | liveness-probe image pull policy                           | `IfNotPresent`                                                      |
 | `image.nodeDriverRegistrar.repository`            | csi-node-driver-registrar docker image                     | `registry.k8s.io/sig-storage/csi-node-driver-registrar`                  |
-| `image.nodeDriverRegistrar.tag`                   | csi-node-driver-registrar docker image tag                 | `v2.16.0`                                                            |
+| `image.nodeDriverRegistrar.tag`                   | csi-node-driver-registrar docker image tag                 | `v2.17.0`                                                            |
 | `image.nodeDriverRegistrar.pullPolicy`            | csi-node-driver-registrar image pull policy                | `IfNotPresent`                                                      |
 | `imagePullSecrets`                                | Specify docker-registry secret names as an array           | [] (does not add image pull secrets to deployed pods)                                                           |
 | `serviceAccount.create`                           | whether create service account of csi-nfs-controller       | `true`                                                              |
 | `rbac.create`                                     | whether create rbac of csi-nfs-controller                  | `true`                                                              |
 | `controller.replicas`                             | replica number of csi-nfs-controller                         | `1`                                                                 |
+| `controller.revisionHistoryLimit`                 | revisionHistoryLimit of csi-nfs-controller                   | `10`                                                                |
 | `controller.runOnMaster`                          | run controller on master node(deprecated on k8s 1.25+)                                                          |`false`                                                           |
 | `controller.runOnControlPlane`                    | run controller on control plane node                                                          |`false`                                                           |
 | `controller.dnsPolicy`                            | dnsPolicy of controller driver, available values: `Default`, `ClusterFirstWithHostNet`, `ClusterFirst`                              | `ClusterFirstWithHostNet`                                                             |
@@ -106,6 +107,7 @@ The following table lists the configurable parameters of the latest NFS CSI Driv
 | `node.affinity`                                      | node pod affinity                                     | {}                                                             |
 | `node.nodeSelector`                                   | node pod node selector                                | `{}`                                                             |
 | `node.priorityClassName`                              | node pod priority class name                          | `system-cluster-critical`                                                             |
+| `node.revisionHistoryLimit`                           | node pod revisionHistoryLimit                         | `10`                                                                |
 | `node.tolerations`                              | node pod tolerations                            |                                                              |
 | `node.resources.livenessProbe.limits.memory`          | liveness-probe memory limits                          | 100Mi                                                          |
 | `node.resources.livenessProbe.requests.cpu`           | liveness-probe cpu requests limits                    | 10m                                                            |
@@ -119,6 +121,7 @@ The following table lists the configurable parameters of the latest NFS CSI Driv
 | `externalSnapshotter.enabled`                         | enable snapshot-controller                         | `false`
 | `externalSnapshotter.name`                            | name of snapshot-controller                         | `snapshot-controller`
 | `externalSnapshotter.controller.replicas`             | replica number of snapshot-controller                         | 1
+| `externalSnapshotter.controller.revisionHistoryLimit` | revisionHistoryLimit of snapshot-controller                   | `10`                                                                |
 | `externalSnapshotter.resources.limits.memory`         | snapshot-controller memory limits                          | 300Mi                                                          |
 | `externalSnapshotter.resources.requests.cpu`          | snapshot-controller cpu requests limits                    | 10m                                                            |
 | `externalSnapshotter.resources.requests.memory`       | snapshot-controller memory requests limits                 | 20Mi                                                           |
