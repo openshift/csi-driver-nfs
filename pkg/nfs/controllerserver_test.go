@@ -616,8 +616,100 @@ func TestGetInternalMountPath(t *testing.T) {
 	}
 
 	for _, test := range cases {
-		path := getInternalMountPath(test.workingMountDir, test.vol)
+		path, err := getInternalMountPath(test.workingMountDir, test.vol)
+		assert.NoError(t, err)
 		assert.Equal(t, path, test.result)
+	}
+}
+
+// TestInternalPathContainment is a defense-in-depth check: even if a traversal
+// sequence slips past the ID/parameter validation, the internal path builders
+// must refuse to resolve a path outside workingMountDir.
+func TestInternalPathContainment(t *testing.T) {
+	cases := []struct {
+		desc      string
+		vol       *nfsVolume
+		expectErr bool
+	}{
+		{
+			desc: "clean subDir/uuid stays within base",
+			vol:  &nfsVolume{subDir: "subdir", uuid: "uuid"},
+		},
+		{
+			desc:      "uuid escapes base",
+			vol:       &nfsVolume{subDir: "subdir", uuid: "../../../etc"},
+			expectErr: true,
+		},
+		{
+			desc:      "subDir escapes base (empty uuid)",
+			vol:       &nfsVolume{subDir: "../../../etc"},
+			expectErr: true,
+		},
+		{
+			desc:      "subDir escapes base via nested traversal",
+			vol:       &nfsVolume{subDir: "a/../../../etc", uuid: "uuid"},
+			expectErr: true,
+		},
+		{
+			// A malformed ID with empty subDir and uuid would collapse the
+			// internal path to workingMountDir itself; deletion must not run
+			// os.RemoveAll on the mounted share root.
+			desc:      "empty subDir and uuid must not resolve to base",
+			vol:       &nfsVolume{},
+			expectErr: true,
+		},
+	}
+
+	for _, test := range cases {
+		t.Run(test.desc, func(t *testing.T) {
+			_, mErr := getInternalMountPath("/tmp", test.vol)
+			_, vErr := getInternalVolumePath("/tmp", test.vol)
+			if test.expectErr {
+				// At least one builder must reject; the escaping component may be
+				// subDir (only caught by getInternalVolumePath) or uuid (caught
+				// by both).
+				assert.True(t, mErr != nil || vErr != nil, "expected containment error")
+			} else {
+				assert.NoError(t, mErr)
+				assert.NoError(t, vErr)
+			}
+		})
+	}
+}
+
+func TestNewNFSSnapshot(t *testing.T) {
+	validVol := &nfsVolume{server: "nfs-server", baseDir: "share", subDir: "subdir", uuid: "vol-uuid"}
+	cases := []struct {
+		desc      string
+		name      string
+		params    map[string]string
+		vol       *nfsVolume
+		expectErr bool
+	}{
+		{
+			desc:   "valid snapshot",
+			name:   "snap-name",
+			params: map[string]string{paramServer: "nfs-server", paramShare: "share"},
+			vol:    validVol,
+		},
+		{
+			desc:      "share with path traversal should be rejected",
+			name:      "snap-name",
+			params:    map[string]string{paramServer: "nfs-server", paramShare: "/exports/../../../etc"},
+			vol:       validVol,
+			expectErr: true,
+		},
+	}
+
+	for _, test := range cases {
+		t.Run(test.desc, func(t *testing.T) {
+			_, err := newNFSSnapshot(test.name, test.params, test.vol)
+			if test.expectErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
 	}
 }
 
@@ -728,6 +820,22 @@ func TestNewNFSVolume(t *testing.T) {
 			},
 			expectVol: nil,
 			expectErr: fmt.Errorf("invalid share %q: path contains directory traversal sequence", "/exports/../../../etc"),
+		},
+		{
+			// The raw subDir template contains no "..": the traversal only
+			// appears after pvc metadata substitution, so validation must run
+			// against the expanded value.
+			desc: "subDir traversal injected via metadata substitution should be rejected",
+			name: "pv-name",
+			size: 100,
+			params: map[string]string{
+				paramServer: "//nfs-server.default.svc.cluster.local",
+				paramShare:  "share",
+				paramSubDir: fmt.Sprintf("%s/data", pvcNameMetadata),
+				pvcNameKey:  "..",
+			},
+			expectVol: nil,
+			expectErr: fmt.Errorf("invalid subDir %q: path contains directory traversal sequence", "../data"),
 		},
 	}
 
@@ -1235,6 +1343,85 @@ func TestCreateSnapshotWithoutCompression(t *testing.T) {
 	_ = os.RemoveAll("/tmp/snapshot-name-no-compress")
 }
 
+func TestCreateSnapshotWithDifferentShareInSnapshotClass(t *testing.T) {
+	// Test that CreateSnapshot succeeds when VolumeSnapshotClass specifies
+	// a different server/share than the source volume. This verifies that
+	// the source volume mount uses server/share from the volumeHandle,
+	// not from the snapshot class parameters.
+	cs := initTestController(t)
+
+	// Setup: create source directory matching the source volume path
+	srcPath := "/tmp/src-pv-cross-share/subdir"
+	if err := os.MkdirAll(srcPath, 0777); err != nil {
+		t.Fatalf("failed to create source directory: %v", err)
+	}
+	defer func() { _ = os.RemoveAll("/tmp/src-pv-cross-share") }()
+	defer func() { _ = os.RemoveAll("/tmp/snapshot-cross-share") }()
+
+	// Snapshot class parameters specify a DIFFERENT server/share than the source volume.
+	// Note: share value omits leading '/' consistent with paramShare convention in this repo.
+	req := &csi.CreateSnapshotRequest{
+		SourceVolumeId: "nfs-server.default.svc.cluster.local#share#subdir#src-pv-cross-share",
+		Name:           "snapshot-cross-share",
+		Parameters: map[string]string{
+			paramServer: "other-nfs-server.default.svc.cluster.local",
+			paramShare:  "different-share",
+		},
+	}
+
+	resp, err := cs.CreateSnapshot(context.TODO(), req)
+	if err != nil {
+		t.Fatalf("CreateSnapshot failed with cross-share snapshot class: %v", err)
+	}
+
+	if resp == nil || resp.Snapshot == nil {
+		t.Fatalf("CreateSnapshot returned nil response")
+	}
+
+	// Verify the snapshot was created successfully
+	expectedSourceVolumeID := "nfs-server.default.svc.cluster.local#share#subdir#src-pv-cross-share"
+	if resp.Snapshot.SourceVolumeId != expectedSourceVolumeID {
+		t.Errorf("expected SourceVolumeId %q, got %q", expectedSourceVolumeID, resp.Snapshot.SourceVolumeId)
+	}
+
+	// Verify that the FakeMounter was called with the correct mount sources:
+	// - source volume mount should use the source volume's server/share
+	// - snapshot volume mount should use the snapshot class's server/share
+	fakeMounter := cs.Driver.ns.mounter.(*mount.FakeMounter)
+	mountLog := fakeMounter.GetLog()
+
+	var foundSourceMount, foundSnapMount bool
+	for _, action := range mountLog {
+		if action.Action != "mount" {
+			continue
+		}
+		// Source volume mount: server from volumeHandle, share from volumeHandle
+		// Use filepath.ToSlash to normalize Windows backslash separators
+		normalizedSource := filepath.ToSlash(action.Source)
+		if normalizedSource == "nfs-server.default.svc.cluster.local:/share" {
+			foundSourceMount = true
+		}
+		// Snapshot destination mount: server/share from snapshot class parameters
+		if normalizedSource == "other-nfs-server.default.svc.cluster.local:/different-share" {
+			foundSnapMount = true
+		}
+	}
+	if !foundSourceMount {
+		t.Errorf("expected source volume mount with source %q, mount log: %+v",
+			"nfs-server.default.svc.cluster.local:/share", mountLog)
+	}
+	if !foundSnapMount {
+		t.Errorf("expected snapshot destination mount with source %q, mount log: %+v",
+			"other-nfs-server.default.svc.cluster.local:/different-share", mountLog)
+	}
+
+	// Verify the snapshot archive file was created
+	archivePath := "/tmp/snapshot-cross-share/snapshot-cross-share/src-pv-cross-share.tar.gz"
+	if _, err := os.Stat(archivePath); os.IsNotExist(err) {
+		t.Errorf("expected snapshot archive at %s, but it does not exist", archivePath)
+	}
+}
+
 func TestCopyVolumeFromUncompressedSnapshot(t *testing.T) {
 	// Create an uncompressed snapshot archive and test restoration
 	srcPath := "/tmp/uncompressed-snapshot-test/uncompressed-snapshot-test"
@@ -1528,11 +1715,103 @@ func TestGetNfsVolFromID(t *testing.T) {
 			},
 			expectErr: false,
 		},
+		{
+			name:      "uuid with path traversal should be rejected",
+			volumeID:  "test-server#base#subdir#../../etc/shadow#delete",
+			expected:  nil,
+			expectErr: true,
+		},
 	}
 
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			result, err := getNfsVolFromID(test.volumeID)
+
+			if test.expectErr && err == nil {
+				t.Errorf("expected error but got nil")
+			}
+			if !test.expectErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if !reflect.DeepEqual(result, test.expected) {
+				t.Errorf("got %+v, expected %+v", result, test.expected)
+			}
+		})
+	}
+}
+
+func TestGetNfsSnapFromID(t *testing.T) {
+	cases := []struct {
+		name       string
+		snapshotID string
+		expected   *nfsSnapshot
+		expectErr  bool
+	}{
+		{
+			name:       "empty snapshot ID",
+			snapshotID: "",
+			expected:   &nfsSnapshot{},
+			expectErr:  true,
+		},
+		{
+			name:       "too few segments",
+			snapshotID: "test-server#base-dir#snap-uuid",
+			expected:   &nfsSnapshot{},
+			expectErr:  true,
+		},
+		{
+			name:       "too many segments",
+			snapshotID: "test-server#base-dir#snap-uuid#archive-path#archive-name#extra",
+			expected:   &nfsSnapshot{},
+			expectErr:  true,
+		},
+		{
+			name:       "valid snapshot ID",
+			snapshotID: "nfs-server.default.svc.cluster.local#share#snapshot-016f#snapshot-016f#pvc-4bcb",
+			expected: &nfsSnapshot{
+				id:      "nfs-server.default.svc.cluster.local#share#snapshot-016f#snapshot-016f#pvc-4bcb",
+				server:  "nfs-server.default.svc.cluster.local",
+				baseDir: "share",
+				uuid:    "snapshot-016f",
+				src:     "pvc-4bcb",
+			},
+			expectErr: false,
+		},
+		{
+			name:       "valid snapshot ID with nested baseDir",
+			snapshotID: "test-server#test/base/dir#snap-uuid#archive-path#archive-name",
+			expected: &nfsSnapshot{
+				id:      "test-server#test/base/dir#snap-uuid#archive-path#archive-name",
+				server:  "test-server",
+				baseDir: "test/base/dir",
+				uuid:    "snap-uuid",
+				src:     "archive-name",
+			},
+			expectErr: false,
+		},
+		{
+			name:       "baseDir with path traversal should be rejected",
+			snapshotID: "test-server#../../etc#snap-uuid#archive-path#archive-name",
+			expected:   nil,
+			expectErr:  true,
+		},
+		{
+			name:       "uuid with path traversal should be rejected",
+			snapshotID: "test-server#base-dir#../../etc/shadow#archive-path#archive-name",
+			expected:   nil,
+			expectErr:  true,
+		},
+		{
+			name:       "src with path traversal should be rejected",
+			snapshotID: "test-server#base-dir#snap-uuid#archive-path#../../etc/passwd",
+			expected:   nil,
+			expectErr:  true,
+		},
+	}
+
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			result, err := getNfsSnapFromID(test.snapshotID)
 
 			if test.expectErr && err == nil {
 				t.Errorf("expected error but got nil")
