@@ -418,6 +418,7 @@ func TestNodeUnpublishVolume(t *testing.T) {
 	errorTarget := testutil.GetWorkDirPath("error_is_likely_target", t)
 	targetTest := testutil.GetWorkDirPath("target_test", t)
 	targetFile := testutil.GetWorkDirPath("abc.go", t)
+	lockKey := fmt.Sprintf("%s-%s", "vol_1", targetTest)
 
 	tests := []struct {
 		desc        string

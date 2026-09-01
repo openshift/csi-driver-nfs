@@ -23,8 +23,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
-
-	"github.com/golang/glog"
+	"syscall"
+	"time"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"google.golang.org/grpc/codes"
@@ -49,7 +49,7 @@ type NodeServer struct {
 }
 
 // NodePublishVolume mount the volume
-func (ns *NodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
+func (ns *NodeServer) NodePublishVolume(_ context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
 	volCap := req.GetVolumeCapability()
 	if volCap == nil {
 		return nil, status.Error(codes.InvalidArgument, "Volume capability missing in request")
@@ -196,19 +196,40 @@ func (ns *NodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	return &csi.NodePublishVolumeResponse{}, nil
 }
 
+// applyUIDGID chowns static PVs after mount. Dynamic volumes are already
+// owned in CreateVolume. Skip read-only publishes: the mount is ro so chown
+// would fail.
+func (ns *NodeServer) applyUIDGID(targetPath string, uid, gid int, readonly bool, volumeContext map[string]string) error {
+	if uid == unsetOwner && gid == unsetOwner {
+		return nil
+	}
+	if readonly {
+		klog.V(2).Infof("skip chown on targetPath(%s): volume is read-only", targetPath)
+		return nil
+	}
+	if isDynamicallyProvisioned(volumeContext) {
+		klog.V(2).Infof("skip chown on targetPath(%s): uid/gid already applied in CreateVolume", targetPath)
+		return nil
+	}
+	return chownIfOwnerMismatch(targetPath, uid, gid)
+}
+
 // NodeUnpublishVolume unmount the volume
-func (ns *NodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {
+func (ns *NodeServer) NodeUnpublishVolume(_ context.Context, req *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {
 	volumeID := req.GetVolumeId()
 	if len(volumeID) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Volume ID missing in request")
 	}
 	targetPath := req.GetTargetPath()
-	glog.V(6).Infof("NodeUnpublishVolume started for %s", targetPath)
-
-	notMnt, err := ns.IsNotMountPoint(targetPath)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+	if len(targetPath) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "Target path missing in request")
 	}
+
+	lockKey := fmt.Sprintf("%s-%s", volumeID, targetPath)
+	if acquired := ns.Driver.volumeLocks.TryAcquire(lockKey); !acquired {
+		return nil, status.Errorf(codes.Aborted, volumeOperationAlreadyExistsFmt, volumeID)
+	}
+	defer ns.Driver.volumeLocks.Release(lockKey)
 
 	klog.V(2).Infof("NodeUnpublishVolume: unmounting volume %s on %s", volumeID, targetPath)
 	var err error
@@ -225,34 +246,11 @@ func (ns *NodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	}
 	klog.V(2).Infof("NodeUnpublishVolume: unmount volume %s on %s successfully", volumeID, targetPath)
 
-	glog.V(4).Infof("NodeUnpublishVolume: path %s is *not* a mount point: %t", targetPath, notMnt)
-	if !notMnt {
-
-		err := ns.tryUnmount(targetPath)
-		if err != nil {
-			if err == context.DeadlineExceeded {
-				glog.V(2).Infof("Timed out waiting for unmount of %s, trying with -f", targetPath)
-				err = ns.forceUnmount(targetPath)
-			}
-		}
-		if err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-		glog.V(2).Infof("Unmounted %s", targetPath)
-	}
-
-	if err := os.Remove(targetPath); err != nil {
-		if !os.IsNotExist(err) {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-	}
-	glog.V(4).Infof("Cleaned %s", targetPath)
-
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
 
 // NodeGetInfo return info of the node on which this plugin is running
-func (ns *NodeServer) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
+func (ns *NodeServer) NodeGetInfo(_ context.Context, _ *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
 	return &csi.NodeGetInfoResponse{
 		NodeId: ns.Driver.nodeID,
 	}, nil
