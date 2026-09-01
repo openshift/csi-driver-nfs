@@ -4,7 +4,6 @@ go 1.26.0
 
 require (
 	github.com/container-storage-interface/spec v1.11.0
-	github.com/golang/glog v1.2.5
 	github.com/kubernetes-csi/csi-lib-utils v0.9.0
 	github.com/onsi/ginkgo/v2 v2.32.2
 	github.com/onsi/gomega v1.44.0
