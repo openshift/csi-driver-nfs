@@ -1,23 +1,24 @@
 module github.com/kubernetes-csi/csi-driver-nfs
 
-go 1.24.0
+go 1.26.0
 
 require (
 	github.com/container-storage-interface/spec v1.11.0
+	github.com/golang/glog v1.2.5
 	github.com/kubernetes-csi/csi-lib-utils v0.9.0
 	github.com/onsi/ginkgo/v2 v2.32.2
 	github.com/onsi/gomega v1.44.0
 	github.com/pborman/uuid v1.2.1
-	github.com/stretchr/testify v1.8.4
-	golang.org/x/net v0.17.0
-	google.golang.org/grpc v1.57.0
-	google.golang.org/protobuf v1.31.0
-	k8s.io/api v0.24.15
-	k8s.io/apimachinery v0.24.15
-	k8s.io/client-go v0.24.15
-	k8s.io/klog/v2 v2.100.1
-	k8s.io/kubernetes v1.24.15
-	k8s.io/mount-utils v0.24.15
+	github.com/stretchr/testify v1.12.1
+	go.uber.org/goleak v1.3.0
+	google.golang.org/grpc v1.83.2
+	google.golang.org/protobuf v1.36.12
+	k8s.io/api v0.32.10
+	k8s.io/apimachinery v0.32.10
+	k8s.io/client-go v0.32.10
+	k8s.io/klog/v2 v2.140.0
+	k8s.io/kubernetes v1.32.10
+	k8s.io/mount-utils v0.32.0
 	k8s.io/pod-security-admission v0.0.0
 	k8s.io/utils v0.0.0-20241104100929-3ea5e8cea738
 	sigs.k8s.io/yaml v1.6.0
@@ -53,8 +54,8 @@ require (
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
-	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/net v0.55.0 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
+	golang.org/x/net v0.58.0 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	k8s.io/cri-api v0.32.10 // indirect
 	k8s.io/cri-client v0.0.0 // indirect
@@ -116,29 +117,29 @@ require (
 	go.etcd.io/etcd/client/pkg/v3 v3.5.16 // indirect
 	go.etcd.io/etcd/client/v3 v3.5.16 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.53.0 // indirect
-	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.53.0 // indirect
-	go.opentelemetry.io/otel v1.40.0 // indirect
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.61.0 // indirect
+	go.opentelemetry.io/otel v1.44.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.28.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.27.0 // indirect
-	go.opentelemetry.io/otel/metric v1.40.0 // indirect
-	go.opentelemetry.io/otel/sdk v1.40.0 // indirect
-	go.opentelemetry.io/otel/trace v1.40.0 // indirect
+	go.opentelemetry.io/otel/metric v1.44.0 // indirect
+	go.opentelemetry.io/otel/sdk v1.44.0 // indirect
+	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.3.1 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
-	golang.org/x/crypto v0.53.0 // indirect
+	golang.org/x/crypto v0.56.0 // indirect
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
-	golang.org/x/mod v0.36.0
-	golang.org/x/oauth2 v0.34.0 // indirect
-	golang.org/x/sync v0.21.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
-	golang.org/x/term v0.44.0 // indirect
-	golang.org/x/text v0.38.0 // indirect
+	golang.org/x/mod v0.40.0
+	golang.org/x/oauth2 v0.36.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/sys v0.47.0
+	golang.org/x/term v0.45.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
 	golang.org/x/time v0.7.0 // indirect
-	golang.org/x/tools v0.45.0 // indirect
+	golang.org/x/tools v0.49.0 // indirect
 	google.golang.org/genproto v0.0.0-20240227224415-6ceb2ff114de // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20260120221211-b8f7ae30c516 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260120221211-b8f7ae30c516 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

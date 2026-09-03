@@ -154,15 +154,6 @@ func (c *connection) clientAuthenticate(config *ClientConfig) error {
 	return fmt.Errorf("ssh: unable to authenticate, attempted methods %v, no supported methods remain", tried)
 }
 
-		if auth == nil && err != nil {
-			// We have an error and there are no other authentication methods to
-			// try, so we return it.
-			return err
-		}
-	}
-	return fmt.Errorf("ssh: unable to authenticate, attempted methods %v, no supported methods remain", tried)
-}
-
 // An AuthMethod represents an instance of an RFC 4252 authentication method.
 type AuthMethod interface {
 	// auth authenticates user over transport t.
@@ -292,7 +283,7 @@ func pickSignatureAlgorithm(signer Signer, extensions map[string][]byte) (MultiA
 		// Fallback to use if there is no "server-sig-algs" extension or a
 		// common algorithm cannot be found. We use the public key format if the
 		// MultiAlgorithmSigner supports it, otherwise we return an error.
-		if !contains(as.Algorithms(), underlyingAlgo(keyFormat)) {
+		if !slices.Contains(as.Algorithms(), underlyingAlgo(keyFormat)) {
 			return "", fmt.Errorf("ssh: no common public key signature algorithm, server only supports %q for key type %q, signer only supports %v",
 				underlyingAlgo(keyFormat), keyFormat, as.Algorithms())
 		}
@@ -319,14 +310,18 @@ func pickSignatureAlgorithm(signer Signer, extensions map[string][]byte) (MultiA
 	}
 
 	// Filter algorithms based on those supported by MultiAlgorithmSigner.
+	// Iterate over the signer's algorithms first to preserve its preference order.
+	supportedKeyAlgos := algorithmsForKeyFormat(keyFormat)
 	var keyAlgos []string
-	for _, algo := range algorithmsForKeyFormat(keyFormat) {
-		if contains(as.Algorithms(), underlyingAlgo(algo)) {
-			keyAlgos = append(keyAlgos, algo)
+	for _, signerAlgo := range as.Algorithms() {
+		if idx := slices.IndexFunc(supportedKeyAlgos, func(algo string) bool {
+			return underlyingAlgo(algo) == signerAlgo
+		}); idx >= 0 {
+			keyAlgos = append(keyAlgos, supportedKeyAlgos[idx])
 		}
 	}
 
-	algo, err := findCommon("public key signature algorithm", keyAlgos, serverAlgos)
+	algo, err := findCommon("public key signature algorithm", keyAlgos, serverAlgos, true)
 	if err != nil {
 		// If there is no overlap, return the fallback algorithm to support
 		// servers that fail to list all supported algorithms.
@@ -348,7 +343,10 @@ func (cb publicKeyCallback) auth(session []byte, user string, c packetConn, rand
 	}
 	var methods []string
 	var errSigAlgo error
-	for _, signer := range signers {
+
+	origSignersLen := len(signers)
+	for idx := 0; idx < len(signers); idx++ {
+		signer := signers[idx]
 		pub := signer.PublicKey()
 		as, algo, err := pickSignatureAlgorithm(signer, extensions)
 		if err != nil && errSigAlgo == nil {

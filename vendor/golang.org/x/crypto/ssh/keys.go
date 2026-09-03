@@ -426,11 +426,11 @@ func NewSignerWithAlgorithms(signer AlgorithmSigner, algorithms []string) (Multi
 	}
 
 	for _, algo := range algorithms {
-		if !contains(supportedAlgos, algo) {
+		if !slices.Contains(supportedAlgos, algo) {
 			return nil, fmt.Errorf("ssh: algorithm %q is not supported for key type %q",
 				algo, signer.PublicKey().Type())
 		}
-		if !contains(signerAlgos, algo) {
+		if !slices.Contains(signerAlgos, algo) {
 			return nil, fmt.Errorf("ssh: algorithm %q is restricted for the provided signer", algo)
 		}
 	}
@@ -485,10 +485,11 @@ func parseRSA(in []byte) (out PublicKey, rest []byte, err error) {
 		return nil, nil, err
 	}
 
-	// 8192 bits is also the maximum RSA key size accepted by crypto/tls for
-	// signature verification:
-	// https://github.com/golang/go/blob/69801b25/src/crypto/tls/handshake_client.go#L1096
-	if w.N.BitLen() > 8192 {
+	// 16384 bits is the largest RSA key OpenSSH will generate (ssh-keygen
+	// caps -b at 16384), so it is the practical upper bound for keys seen on
+	// the wire. Rejecting anything larger bounds the CPU spent verifying an
+	// attacker-supplied key and signature, mitigating a denial of service.
+	if w.N.BitLen() > 16384 {
 		return nil, nil, errors.New("ssh: rsa modulus too large")
 	}
 	if w.E.BitLen() > 24 {
@@ -1228,7 +1229,7 @@ func (s *wrappedSigner) SignWithAlgorithm(rand io.Reader, data []byte, algorithm
 		algorithm = s.pubKey.Type()
 	}
 
-	if !contains(s.Algorithms(), algorithm) {
+	if !slices.Contains(s.Algorithms(), algorithm) {
 		return nil, fmt.Errorf("ssh: unsupported signature algorithm %q for key format %q", algorithm, s.pubKey.Type())
 	}
 
@@ -1581,6 +1582,7 @@ type openSSHEncryptedPrivateKey struct {
 	NumKeys      uint32
 	PubKey       []byte
 	PrivKeyBlock []byte
+	Rest         []byte `ssh:"rest"`
 }
 
 type openSSHPrivateKey struct {
@@ -1668,13 +1670,13 @@ func parseOpenSSHPrivateKey(key []byte, decrypt openSSHDecryptFunc) (crypto.Priv
 		}
 
 		// Mirror the validation done in parseRSA for public keys: cap the
-		// modulus at the same limit enforced by crypto/tls, reject oversized
-		// or invalid exponents, and additionally bound the prime factors to
+		// modulus at the OpenSSH-generated maximum, reject oversized or
+		// invalid exponents, and additionally bound the prime factors to
 		// avoid the expensive CRT coefficient recomputation in pk.Precompute.
-		if key.N.BitLen() > 8192 {
+		if key.N.BitLen() > 16384 {
 			return nil, errors.New("ssh: rsa modulus too large")
 		}
-		if key.P.BitLen() > 4096 || key.Q.BitLen() > 4096 {
+		if key.P.BitLen() > 8192 || key.Q.BitLen() > 8192 {
 			return nil, errors.New("ssh: rsa prime too large")
 		}
 		if key.E.BitLen() > 24 {

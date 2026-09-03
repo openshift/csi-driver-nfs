@@ -116,8 +116,8 @@ func read(fd int, p []byte) (n int, err error) {
 	r0, e2, e1 := CallLeFuncWithErr(GetZosLibVec()+SYS_READ<<4, uintptr(fd), uintptr(_p0), uintptr(len(p)))
 	runtime.ExitSyscall()
 	n = int(r0)
-	if e1 != 0 {
-		err = errnoErr(e1)
+	if int64(r0) == -1 {
+		err = errnoErr2(e1, e2)
 	}
 	return
 }
