@@ -855,7 +855,7 @@ userAuthLoop:
 				// ssh-rsa-cert-v01@openssh.com algorithm with ssh-rsa public
 				// key type. The algorithm and public key type must be
 				// consistent: both must be certificate algorithms, or neither.
-				if !contains(algorithmsForKeyFormat(pubKey.Type()), algo) {
+				if !slices.Contains(algorithmsForKeyFormat(pubKey.Type()), algo) {
 					authErr = fmt.Errorf("ssh: public key type %q not compatible with selected algorithm %q",
 						pubKey.Type(), algo)
 					break
@@ -894,13 +894,6 @@ userAuthLoop:
 					// and successfully verified. If authErr is non-nil, the key is not
 					// considered verified and the callback must not run.
 					perms, authErr = config.VerifiedPublicKeyCallback(s, pubKey, perms, sig.Format)
-				}
-				if authErr == nil && perms != nil && perms.CriticalOptions != nil {
-					if saco := perms.CriticalOptions[sourceAddressCriticalOption]; saco != "" {
-						if err := checkSourceAddress(s.RemoteAddr(), saco); err != nil {
-							authErr = err
-						}
-					}
 				}
 			}
 		case "gssapi-with-mic":

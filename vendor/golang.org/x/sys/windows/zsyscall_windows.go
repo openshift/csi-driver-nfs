@@ -1831,7 +1831,7 @@ func CloseHandle(handle Handle) (err error) {
 }
 
 func ClosePseudoConsole(console Handle) {
-	syscall.Syscall(procClosePseudoConsole.Addr(), 1, uintptr(console), 0, 0)
+	syscall.SyscallN(procClosePseudoConsole.Addr(), uintptr(console))
 	return
 }
 
@@ -1965,7 +1965,7 @@ func CreateProcess(appName *uint16, commandLine *uint16, procSecurity *SecurityA
 }
 
 func createPseudoConsole(size uint32, in Handle, out Handle, flags uint32, pconsole *Handle) (hr error) {
-	r0, _, _ := syscall.Syscall6(procCreatePseudoConsole.Addr(), 5, uintptr(size), uintptr(in), uintptr(out), uintptr(flags), uintptr(unsafe.Pointer(pconsole)), 0)
+	r0, _, _ := syscall.SyscallN(procCreatePseudoConsole.Addr(), uintptr(size), uintptr(in), uintptr(out), uintptr(flags), uintptr(unsafe.Pointer(pconsole)))
 	if r0 != 0 {
 		hr = syscall.Errno(r0)
 	}
@@ -3185,7 +3185,7 @@ func ResetEvent(event Handle) (err error) {
 }
 
 func resizePseudoConsole(pconsole Handle, size uint32) (hr error) {
-	r0, _, _ := syscall.Syscall(procResizePseudoConsole.Addr(), 2, uintptr(pconsole), uintptr(size), 0)
+	r0, _, _ := syscall.SyscallN(procResizePseudoConsole.Addr(), uintptr(pconsole), uintptr(size))
 	if r0 != 0 {
 		hr = syscall.Errno(r0)
 	}
@@ -4255,7 +4255,7 @@ func setupUninstallOEMInf(infFileName *uint16, flags SUOI, reserved uintptr) (er
 }
 
 func commandLineToArgv(cmd *uint16, argc *int32) (argv **uint16, err error) {
-	r0, _, e1 := syscall.Syscall(procCommandLineToArgvW.Addr(), 2, uintptr(unsafe.Pointer(cmd)), uintptr(unsafe.Pointer(argc)), 0)
+	r0, _, e1 := syscall.SyscallN(procCommandLineToArgvW.Addr(), uintptr(unsafe.Pointer(cmd)), uintptr(unsafe.Pointer(argc)))
 	argv = (**uint16)(unsafe.Pointer(r0))
 	if argv == nil {
 		err = errnoErr(e1)

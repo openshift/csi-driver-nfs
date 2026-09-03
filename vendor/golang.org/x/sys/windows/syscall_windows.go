@@ -321,6 +321,8 @@ func NewCallbackCDecl(fn interface{}) uintptr {
 //sys	SetConsoleOutputCP(cp uint32) (err error) = kernel32.SetConsoleOutputCP
 //sys	WriteConsole(console Handle, buf *uint16, towrite uint32, written *uint32, reserved *byte) (err error) = kernel32.WriteConsoleW
 //sys	ReadConsole(console Handle, buf *uint16, toread uint32, read *uint32, inputControl *byte) (err error) = kernel32.ReadConsoleW
+//sys	GetNumberOfConsoleInputEvents(console Handle, numevents *uint32) (err error) = kernel32.GetNumberOfConsoleInputEvents
+//sys	FlushConsoleInputBuffer(console Handle) (err error) = kernel32.FlushConsoleInputBuffer
 //sys	resizePseudoConsole(pconsole Handle, size uint32) (hr error) = kernel32.ResizePseudoConsole
 //sys	CreateToolhelp32Snapshot(flags uint32, processId uint32) (handle Handle, err error) [failretval==InvalidHandle] = kernel32.CreateToolhelp32Snapshot
 //sys	Module32First(snapshot Handle, moduleEntry *ModuleEntry32) (err error) = kernel32.Module32FirstW
@@ -1711,8 +1713,9 @@ func NewNTUnicodeString(s string) (*NTUnicodeString, error) {
 
 // Slice returns a uint16 slice that aliases the data in the NTUnicodeString.
 func (s *NTUnicodeString) Slice() []uint16 {
-	slice := unsafe.Slice(s.Buffer, s.MaximumLength)
-	return slice[:s.Length]
+	// Note: this rounds the length down, if it happens
+	// to (incorrectly) be odd. Probably safer than rounding up.
+	return unsafe.Slice(s.Buffer, s.MaximumLength/2)[:s.Length/2]
 }
 
 func (s *NTUnicodeString) String() string {
@@ -1877,3 +1880,73 @@ func ResizePseudoConsole(pconsole Handle, size Coord) error {
 	// accept arguments that can be casted to uintptr, and Coord can't.
 	return resizePseudoConsole(pconsole, *((*uint32)(unsafe.Pointer(&size))))
 }
+
+// DCB constants. See https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-dcb.
+const (
+	CBR_110    = 110
+	CBR_300    = 300
+	CBR_600    = 600
+	CBR_1200   = 1200
+	CBR_2400   = 2400
+	CBR_4800   = 4800
+	CBR_9600   = 9600
+	CBR_14400  = 14400
+	CBR_19200  = 19200
+	CBR_38400  = 38400
+	CBR_57600  = 57600
+	CBR_115200 = 115200
+	CBR_128000 = 128000
+	CBR_256000 = 256000
+
+	DTR_CONTROL_DISABLE   = 0x00000000
+	DTR_CONTROL_ENABLE    = 0x00000010
+	DTR_CONTROL_HANDSHAKE = 0x00000020
+
+	RTS_CONTROL_DISABLE   = 0x00000000
+	RTS_CONTROL_ENABLE    = 0x00001000
+	RTS_CONTROL_HANDSHAKE = 0x00002000
+	RTS_CONTROL_TOGGLE    = 0x00003000
+
+	NOPARITY    = 0
+	ODDPARITY   = 1
+	EVENPARITY  = 2
+	MARKPARITY  = 3
+	SPACEPARITY = 4
+
+	ONESTOPBIT   = 0
+	ONE5STOPBITS = 1
+	TWOSTOPBITS  = 2
+)
+
+// EscapeCommFunction constants. See https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-escapecommfunction.
+const (
+	SETXOFF  = 1
+	SETXON   = 2
+	SETRTS   = 3
+	CLRRTS   = 4
+	SETDTR   = 5
+	CLRDTR   = 6
+	SETBREAK = 8
+	CLRBREAK = 9
+)
+
+// PurgeComm constants. See https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-purgecomm.
+const (
+	PURGE_TXABORT = 0x0001
+	PURGE_RXABORT = 0x0002
+	PURGE_TXCLEAR = 0x0004
+	PURGE_RXCLEAR = 0x0008
+)
+
+// SetCommMask constants. See https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-setcommmask.
+const (
+	EV_RXCHAR  = 0x0001
+	EV_RXFLAG  = 0x0002
+	EV_TXEMPTY = 0x0004
+	EV_CTS     = 0x0008
+	EV_DSR     = 0x0010
+	EV_RLSD    = 0x0020
+	EV_BREAK   = 0x0040
+	EV_ERR     = 0x0080
+	EV_RING    = 0x0100
+)
