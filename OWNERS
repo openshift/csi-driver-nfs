@@ -1,5 +1,7 @@
-approvers:
-  - shiftstack-team
+# See the OWNERS docs: https://git.k8s.io/community/contributors/guide/owners.md
 
-component: "Installer"
-subcomponent: "OpenShift on OpenStack"
+approvers:
+- kubernetes-csi-approvers
+- andyzhangx
+reviewers:
+- kubernetes-csi-reviewers
