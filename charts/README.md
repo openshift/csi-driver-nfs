@@ -32,7 +32,7 @@ Then update the repo cache, search for available versions, and install:
 ```console
 helm repo update csi-driver-nfs
 helm search repo csi-driver-nfs --versions
-helm install csi-driver-nfs csi-driver-nfs/csi-driver-nfs --namespace kube-system --version 4.13.4
+helm install csi-driver-nfs csi-driver-nfs/csi-driver-nfs --namespace kube-system --version 4.13.6
 ```
 
 ### High-availability controller
@@ -87,7 +87,8 @@ The following table lists the configurable parameters of the latest NFS CSI Driv
 | `customLabels`                                    | optional extra labels to k8s resources deployed by chart   | `{}`                                                              |
 | `driver.name`                                     | alternative driver name                                    | `nfs.csi.k8s.io` |
 | `driver.mountPermissions`                         | default mounted folder permissions                             | `0`
-| `feature.enableFSGroupPolicy`                     | enable [`fsGroupPolicy`](https://kubernetes.io/blog/2020/12/14/kubernetes-release-1.20-fsgroupchangepolicy-fsgrouppolicy/#allow-csi-drivers-to-declare-support-for-fsgroup-based-permissions) on a k8s 1.20+ cluster              | `true`                      |
+| `feature.enableFSGroupPolicy`                     | whether to render [`fsGroupPolicy`](https://kubernetes.io/blog/2020/12/14/kubernetes-release-1.20-fsgroupchangepolicy-fsgrouppolicy/#allow-csi-drivers-to-declare-support-for-fsgroup-based-permissions) in the `CSIDriver` object on a k8s 1.20+ cluster | `true`                      |
+| `feature.fsGroupPolicy`                           | value for `CSIDriver.spec.fsGroupPolicy` when `feature.enableFSGroupPolicy=true`; supported values include `File`, `None`, and `ReadWriteOnceWithFSType`. If omitted during upgrade, the template falls back to `File` to preserve existing behavior. | `File`                      |
 | `feature.enableInlineVolume`                      | enable inline volume                     | `false`                      |
 | `feature.propagateHostMountOptions`               | use the default host NFS mount configuration file [`/etc/nfsmount.conf`](https://man7.org/linux/man-pages/man5/nfsmount.conf.5.html) and/or the default host `/etc/nfsmount.d` mount configuration directory as source for mount options | `false`                      |
 | `kubeletDir`                                      | alternative kubelet directory                              | `/var/lib/kubelet`                                                  |
@@ -95,13 +96,13 @@ The following table lists the configurable parameters of the latest NFS CSI Driv
 | `image.nfs.tag`                                   | csi-driver-nfs image tag                                   | `latest`                                                |
 | `image.nfs.pullPolicy`                            | csi-driver-nfs image pull policy                           | `IfNotPresent`                                                      |
 | `image.csiProvisioner.repository`                 | csi-provisioner docker image                               | `registry.k8s.io/sig-storage/csi-provisioner`                            |
-| `image.csiProvisioner.tag`                        | csi-provisioner docker image tag                           | `v6.3.0`                                                            |
+| `image.csiProvisioner.tag`                        | csi-provisioner docker image tag                           | `v6.4.0`                                                            |
 | `image.csiProvisioner.pullPolicy`                 | csi-provisioner image pull policy                          | `IfNotPresent`                                                      |
 | `image.livenessProbe.repository`                  | liveness-probe docker image                                | `registry.k8s.io/sig-storage/livenessprobe`                              |
-| `image.livenessProbe.tag`                         | liveness-probe docker image tag                            | `v2.19.0`                                                            |
+| `image.livenessProbe.tag`                         | liveness-probe docker image tag                            | `v2.20.0`                                                            |
 | `image.livenessProbe.pullPolicy`                  | liveness-probe image pull policy                           | `IfNotPresent`                                                      |
 | `image.nodeDriverRegistrar.repository`            | csi-node-driver-registrar docker image                     | `registry.k8s.io/sig-storage/csi-node-driver-registrar`                  |
-| `image.nodeDriverRegistrar.tag`                   | csi-node-driver-registrar docker image tag                 | `v2.17.0`                                                            |
+| `image.nodeDriverRegistrar.tag`                   | csi-node-driver-registrar docker image tag                 | `v2.18.0`                                                            |
 | `image.nodeDriverRegistrar.pullPolicy`            | csi-node-driver-registrar image pull policy                | `IfNotPresent`                                                      |
 | `imagePullSecrets`                                | Specify docker-registry secret names as an array           | [] (does not add image pull secrets to deployed pods)                                                           |
 | `serviceAccount.create`                           | whether create service account of csi-nfs-controller       | `true`                                                              |
