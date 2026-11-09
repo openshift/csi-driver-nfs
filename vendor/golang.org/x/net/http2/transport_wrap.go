@@ -131,6 +131,15 @@ func (t transportConfig) DialFromContext(ctx context.Context, network, address s
 type transportInternal struct {
 	initOnce sync.Once
 	lazyt1   *http.Transport
+
+	dialMu sync.Mutex
+	dials  map[string]*transportDialState
+}
+
+type transportDialState struct {
+	dialc   chan struct{} // close when dial returns
+	dialErr error         // dial result, set before dialc is closed
+	rtdonec chan struct{} // closed when RoundTrip initiating the dial returns
 }
 
 func (t *Transport) init() *http.Transport {
@@ -230,7 +239,6 @@ func (t *Transport) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Res
 		},
 	})
 	req = req.WithContext(ctx)
-
 	return t1.RoundTrip(req)
 }
 
