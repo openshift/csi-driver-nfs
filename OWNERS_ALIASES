@@ -1,5 +1,1 @@
-aliases:
-  shiftstack-team:
-    - gryf
-    - mandre
-    - stephenfin
+release-tools/KUBERNETES_CSI_OWNERS_ALIASES
